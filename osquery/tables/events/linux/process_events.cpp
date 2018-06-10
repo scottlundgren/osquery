@@ -11,6 +11,7 @@
 #include <asm/unistd_64.h>
 
 #include <osquery/logger.h>
+#include <osquery/registry_factory.h>
 #include <osquery/sql.h>
 
 #include "osquery/tables/events/linux/process_events.h"
@@ -156,6 +157,9 @@ Status AuditProcessEventSubscriber::ProcessEvents(
         row["owner_uid"], first_path_event_record->fields, "ouid", "0");
     GetStringFieldFromMap(
         row["owner_gid"], first_path_event_record->fields, "ogid", "0");
+
+    // Parent is currently not supported on Linux.
+    row["parent"] = "-1";
 
     emitted_row_list.push_back(row);
   }
