@@ -11,126 +11,22 @@
 #define _WIN32_DCOM
 
 #include "ntapi.h"
+#include "kobjhandle.h"
+
+
 #include <Windows.h>
 #include <strsafe.h>
 
 #include <osquery/core.h>
 #include <osquery/logger.h>
 #include <osquery/tables.h>
+#include <osquery/core/windows/wmi.h>
+
 
 namespace osquery {
 namespace tables {
 
-QueryData* g_pqd = NULL;
-
-typedef BOOL(CALLBACK* ENUMOBJECTSCALLBACKPROC)(POBJDIR_INFORMATION pObjDirInfo,
-                                                PVOID pArg);
-
-// Open a Windows symbolic link by name
-// Always open with the SYMBOLIC_LINK_QUERY access mask
-//
-HRESULT OpenSymbolicLink(PWCHAR pwzLinkName, PHANDLE phSymbolicLink) {
-  HRESULT hr = E_UNEXPECTED;
-  NTSTATUS ntStatus;
-  NTOPENSYMBOLICLINKOBJECT NtOpenSymbolicLinkObject = NULL;
-  UNICODE_STRING usLinkName;
-  OBJECT_ATTRIBUTES oa;
-  size_t cchName;
-
-  // look up addresse of NtOpenSymbolicLinkObject, exported from ntdll
-  NtOpenSymbolicLinkObject = (NTOPENSYMBOLICLINKOBJECT)GetProcAddress(
-      GetModuleHandleA("ntdll"), "NtOpenSymbolicLinkObject");
-  if (NULL == NtOpenSymbolicLinkObject) {
-    hr = HRESULT_FROM_WIN32(GetLastError());
-    goto ErrorExit;
-  }
-
-  hr = StringCchLengthW(pwzLinkName, MAX_PATH, &cchName);
-  if (FAILED(hr)) {
-    goto ErrorExit;
-  }
-
-  oa.Length = sizeof(OBJECT_ATTRIBUTES);
-  oa.RootDirectory = NULL;
-  oa.ObjectName = &usLinkName;
-  oa.ObjectName->Length = LOWORD(cchName) * sizeof(WCHAR);
-  oa.ObjectName->MaximumLength =
-      LOWORD(cchName) * sizeof(WCHAR) + sizeof(WCHAR);
-  oa.ObjectName->Buffer = pwzLinkName;
-  oa.Attributes = OBJ_CASE_INSENSITIVE;
-  oa.SecurityDescriptor = NULL;
-  oa.SecurityQualityOfService = NULL;
-
-  ntStatus = NtOpenSymbolicLinkObject(phSymbolicLink, SYMBOLIC_LINK_QUERY, &oa);
-  if (STATUS_SUCCESS != ntStatus) {
-    hr = HRESULT_FROM_NT(ntStatus);
-    goto ErrorExit;
-  }
-
-  hr = S_OK;
-
-ErrorExit:
-
-  return hr;
-}
-
-// Open a Windows object directory object by name
-// Always open with the DIRECTORY_QUERY access mask
-//
-HRESULT OpenDirectory(PWCHAR pwzName, PHANDLE phDirectory) {
-  HRESULT hr = E_UNEXPECTED;
-  NTSTATUS ntStatus;
-  OBJECT_ATTRIBUTES oa;
-  NTOPENDIRECTORYOBJECT NtOpenDirectoryObject = NULL;
-  UNICODE_STRING us;
-  size_t cchName;
-
-  // protect output parameter
-  *phDirectory = NULL;
-
-  // NtOpenDirectroyObject is documented on MSDN at
-  // https://msdn.microsoft.com/en-us/library/bb470234(v=vs.85).aspx
-  // there is no associated header or import library, so it must be dynamically
-  // loaded
-  NtOpenDirectoryObject = (NTOPENDIRECTORYOBJECT)GetProcAddress(
-      GetModuleHandleA("ntdll"), "NtOpenDirectoryObject");
-  if (NULL == NtOpenDirectoryObject) {
-    hr = HRESULT_FROM_WIN32(GetLastError());
-    goto ErrorExit;
-  }
-
-  hr = StringCchLengthW(pwzName, MAXSHORT, &cchName);
-  if (FAILED(hr)) {
-    goto ErrorExit;
-  }
-
-  oa.Length = sizeof(OBJECT_ATTRIBUTES);
-  oa.RootDirectory = NULL;
-  oa.ObjectName = &us;
-  oa.ObjectName->Length = LOWORD(cchName) * sizeof(WCHAR);
-  oa.ObjectName->MaximumLength =
-      LOWORD(cchName) * sizeof(WCHAR) + sizeof(WCHAR);
-  oa.ObjectName->Buffer = pwzName;
-  oa.Attributes = OBJ_CASE_INSENSITIVE;
-  oa.SecurityDescriptor = NULL;
-  oa.SecurityQualityOfService = NULL;
-
-  ntStatus = NtOpenDirectoryObject(phDirectory, DIRECTORY_QUERY, &oa);
-  if (STATUS_SUCCESS != ntStatus) {
-    hr = HRESULT_FROM_NT(ntStatus);
-    goto ErrorExit;
-  }
-
-  hr = S_OK;
-
-ErrorExit:
-
-  return hr;
-}
-
 // enumerate all objects in the Windows object namespace
-// beginning with a given a starting point
-//
 // does not provide support for recursion
 //
 // example at:
@@ -138,105 +34,53 @@ ErrorExit:
 //    https://randomsourcecode.wordpress.com/2015/03/14/enumerating-deviceobjects-from-user-mode/
 //    https://msdn.microsoft.com/en-us/library/bb470238(v=vs.85).aspx
 //
-HRESULT EnumerateObjectNamespace(PWCHAR pwzRoot,
-                                 ENUMOBJECTSCALLBACKPROC fnCallback,
-                                 PVOID pCallbackParam) {
-  HRESULT hr = E_UNEXPECTED;
-  NTSTATUS ntStatus;
-  NTQUERYDIRECTORYOBJECT NtQueryDirectoryObject = NULL;
-  BYTE rgDirObjInfoBuffer[1024 * 8] = {0};
-  POBJDIR_INFORMATION pObjDirInfo = (POBJDIR_INFORMATION)rgDirObjInfoBuffer;
-  HANDLE hRootDir = NULL;
-  DWORD dwIndex = 0;
+std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std::wstring strRoot) {
+
+  std::vector<std::pair<std::wstring, std::wstring>> thingies;
 
   // look up addresses of NtQueryDirectoryObject and
   // NtQuerySymbolicLinkObject.  Both are exported from ntdll
   //
   // NtQueryDirectoryObject is documented on MSDN, there is no
   // associated header or import library
-  NtQueryDirectoryObject = (NTQUERYDIRECTORYOBJECT)GetProcAddress(
+  NTQUERYDIRECTORYOBJECT NtQueryDirectoryObject = (NTQUERYDIRECTORYOBJECT)GetProcAddress(
       GetModuleHandleA("ntdll"), "NtQueryDirectoryObject");
   if (NULL == NtQueryDirectoryObject) {
-    hr = HRESULT_FROM_WIN32(GetLastError());
-    goto ErrorExit;
+      return thingies;
   }
 
   // open the caller-provided root directory
-  hr = OpenDirectory(pwzRoot, &hRootDir);
-  if (FAILED(hr)) {
-    goto ErrorExit;
+  KObjHandle kdo;
+  if (!kdo.openDirObj(strRoot)) {
+    return thingies;
   }
-
-  do {
+	
+  // iterator index is incremented by NtQueryDirectoryObject
+  for (DWORD index = 0;;) {
+    BYTE rgDirObjInfoBuffer[1024 * 8] = { 0 };
+    POBJDIR_INFORMATION pObjDirInfo = (POBJDIR_INFORMATION)rgDirObjInfoBuffer;
     memset(rgDirObjInfoBuffer, 0, sizeof(rgDirObjInfoBuffer));
 
-    ntStatus = NtQueryDirectoryObject(hRootDir,
+    NTSTATUS ntStatus = NtQueryDirectoryObject(kdo.getAsHandle(),
                                       pObjDirInfo,
                                       sizeof(rgDirObjInfoBuffer),
                                       TRUE,
                                       FALSE,
-                                      &dwIndex,
+                                      &index,
                                       NULL);
     if (STATUS_SUCCESS != ntStatus) {
       // todo: error check here
       break;
     }
 
-    if (!fnCallback(pObjDirInfo, pCallbackParam)) {
-      hr = S_FALSE;
-      goto ErrorExit;
-    }
+    std::pair<std::wstring, std::wstring> x;
+    x.first = (pObjDirInfo->ObjectName.Buffer);
+    x.second = (pObjDirInfo->ObjectTypeName.Buffer);
 
-  } while (TRUE);
-
-ErrorExit:
-
-  if (NULL != hRootDir) {
-    (void)CloseHandle(hRootDir);
+    thingies.push_back(x);
   }
 
-  return hr;
-}
-
-BOOL CALLBACK BaseNamedObjectsCallbackProc(POBJDIR_INFORMATION pObjDirInfo,
-                                           PVOID p) {
-  CHAR szObjectTypeNameUtf8[1024], szObjectNameUtf8[1024];
-
-  if (!WideCharToMultiByte(CP_UTF8,
-                           0,
-                           pObjDirInfo->ObjectTypeName.Buffer,
-                           -1,
-                           szObjectTypeNameUtf8,
-                           sizeof(szObjectNameUtf8),
-                           NULL,
-                           NULL)) {
-    return TRUE;
-  }
-
-  if (!WideCharToMultiByte(CP_UTF8,
-                           0,
-                           pObjDirInfo->ObjectName.Buffer,
-                           -1,
-                           szObjectNameUtf8,
-                           sizeof(szObjectNameUtf8),
-                           NULL,
-                           NULL)) {
-    return TRUE;
-  }
-
-  Row r;
-
-  r["object_name"] = szObjectNameUtf8;
-  r["object_type"] = szObjectTypeNameUtf8;
-
-  PWCHAR pwzSessionId = (PWCHAR)p;
-  int nSessionId = _wtoi(pwzSessionId);
-
-  r["session_id"] = INTEGER(nSessionId);
-
-  g_pqd->push_back(r);
-
-  return TRUE;
+  return thingies;
 }
 
 // callback function to be invoked for each object discovered in
@@ -247,7 +91,6 @@ BOOL CALLBACK BaseNamedObjectsCallbackProc(POBJDIR_INFORMATION pObjDirInfo,
 //
 BOOL CALLBACK EnumerateBaseNamedObjectsLinks(POBJDIR_INFORMATION pObjDirInfo,
                                              PVOID p) {
-  HRESULT hr = E_UNEXPECTED;
   NTSTATUS ntStatus;
   NTQUERYSYMBOLICLINKOBJECT NtQuerySymbolicLinkObject = NULL;
   WCHAR wzSessionPath[MAX_PATH], wzSymbolicLinkTarget[MAX_PATH] = {L'\0'};
@@ -258,8 +101,7 @@ BOOL CALLBACK EnumerateBaseNamedObjectsLinks(POBJDIR_INFORMATION pObjDirInfo,
   NtQuerySymbolicLinkObject = (NTQUERYSYMBOLICLINKOBJECT)GetProcAddress(
       GetModuleHandleA("ntdll"), "NtQuerySymbolicLinkObject");
   if (NULL == NtQuerySymbolicLinkObject) {
-    hr = HRESULT_FROM_WIN32(GetLastError());
-    goto ErrorExit;
+      return FALSE;
   }
 
   // by convention, we expect there to be <n> objects in \Sessions\BNOLINKS with
@@ -276,7 +118,7 @@ BOOL CALLBACK EnumerateBaseNamedObjectsLinks(POBJDIR_INFORMATION pObjDirInfo,
   // begin by validating that the object type is "SymbolicLink"
   //
   if (0 != wcscmp(L"SymbolicLink", pObjDirInfo->ObjectTypeName.Buffer)) {
-    goto ErrorExit;
+    return FALSE;
   }
 
   // validate that this appears to be a valid terminal services session id
@@ -286,27 +128,27 @@ BOOL CALLBACK EnumerateBaseNamedObjectsLinks(POBJDIR_INFORMATION pObjDirInfo,
   //
   if (!(0 == wcscmp(L"0", pObjDirInfo->ObjectName.Buffer) ||
         _wtoi(pObjDirInfo->ObjectName.Buffer) > 0)) {
-    goto ErrorExit;
+    return FALSE;
   }
 
   // at this point we have SymbolicLink with a name matching a terminal services
   // session id
   // build the fully qualified object path
-  hr = StringCchPrintfW(wzSessionPath,
+  HRESULT hr = StringCchPrintfW(wzSessionPath,
                         MAX_PATH,
                         L"%s\\%s",
                         L"\\Sessions\\BNOLINKS",
                         pObjDirInfo->ObjectName.Buffer);
   if (FAILED(hr)) {
-    goto ErrorExit;
+    return FALSE;
   }
 
   // open the symbolic link itself in order to determine the target of the link
-  hr = OpenSymbolicLink(wzSessionPath, &hSymbolicLink);
-  if (FAILED(hr)) {
+  KObjHandle slo;
+  if (!slo.openSymLinkObj(wzSessionPath)) {
     LOG(INFO) << "OpenSymbolicLink failed with 0x" << std::hex << hr << " for "
-              << wzSessionPath;
-    goto ErrorExit;
+      << wzSessionPath;
+    return FALSE;
   }
 
   usSymbolicLinkTarget.Buffer = wzSymbolicLinkTarget;
@@ -316,32 +158,30 @@ BOOL CALLBACK EnumerateBaseNamedObjectsLinks(POBJDIR_INFORMATION pObjDirInfo,
   ntStatus =
       NtQuerySymbolicLinkObject(hSymbolicLink, &usSymbolicLinkTarget, NULL);
   if (STATUS_SUCCESS != ntStatus) {
-    hr = HRESULT_FROM_NT(ntStatus);
-    goto ErrorExit;
+    return FALSE;
   }
 
-  EnumerateObjectNamespace(usSymbolicLinkTarget.Buffer,
-                           BaseNamedObjectsCallbackProc,
-                           pObjDirInfo->ObjectName.Buffer);
+  std::vector<std::pair<std::wstring, std::wstring>> thingies = EnumerateObjectNamespace(usSymbolicLinkTarget.Buffer);
 
-  hr = S_OK;
-
-ErrorExit:
+  
 
   return TRUE;
 }
 
+
 QueryData genBaseNamedObjects(QueryContext& context) {
   QueryData results;
 
-  g_pqd = &results;
-
   // enumerate the base named objects in each terminal services session
-  auto hr = EnumerateObjectNamespace(
-      L"\\Sessions\\BNOLINKS", EnumerateBaseNamedObjectsLinks, &results);
-  if (FAILED(hr)) {
-    LOG(INFO) << "Failed to enumerate basenamedobjects 0x%0.8x" << hr;
-    return results;
+  std::vector<std::pair<std::wstring, std::wstring>> sessions = EnumerateObjectNamespace(L"\\Sessions\\BNOLINKS");
+ 
+  for (auto & element : sessions) {
+    Row r;
+    r["object_name"] = wstringToString(element.first.c_str());
+    r["object_type"] = wstringToString(element.second.c_str());
+
+    results.push_back(r);
+
   }
 
   return results;
