@@ -36,7 +36,7 @@ namespace tables {
 //
 std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std::wstring strRoot) {
 
-  std::vector<std::pair<std::wstring, std::wstring>> thingies;
+  std::vector<std::pair<std::wstring, std::wstring>> objects;
 
   // look up addresses of NtQueryDirectoryObject and
   // NtQuerySymbolicLinkObject.  Both are exported from ntdll
@@ -46,13 +46,13 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
   NTQUERYDIRECTORYOBJECT NtQueryDirectoryObject = (NTQUERYDIRECTORYOBJECT)GetProcAddress(
       GetModuleHandleA("ntdll"), "NtQueryDirectoryObject");
   if (NULL == NtQueryDirectoryObject) {
-      return thingies;
+      return objects;
   }
 
   // open the caller-provided root directory
   KObjHandle kdo;
   if (!kdo.openDirObj(strRoot)) {
-    return thingies;
+    return objects;
   }
 	
   // iterator index is incremented by NtQueryDirectoryObject
@@ -73,14 +73,14 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
       break;
     }
 
-    std::pair<std::wstring, std::wstring> x;
-    x.first = (pObjDirInfo->ObjectName.Buffer);
-    x.second = (pObjDirInfo->ObjectTypeName.Buffer);
+    std::pair<std::wstring, std::wstring> object;
+    object.first = (pObjDirInfo->ObjectName.Buffer);
+    object.second = (pObjDirInfo->ObjectTypeName.Buffer);
 
-    thingies.push_back(x);
+    objects.push_back(object);
   }
 
-  return thingies;
+  return objects;
 }
 
 // callback function to be invoked for each object discovered in
@@ -89,19 +89,15 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
 // for each enumerated object, verify some assumptions and then
 // enumerate the object directory referenced by the object
 //
-BOOL CALLBACK EnumerateBaseNamedObjectsLinks(POBJDIR_INFORMATION pObjDirInfo,
-                                             PVOID p) {
-  NTSTATUS ntStatus;
-  NTQUERYSYMBOLICLINKOBJECT NtQuerySymbolicLinkObject = NULL;
-  WCHAR wzSessionPath[MAX_PATH], wzSymbolicLinkTarget[MAX_PATH] = {L'\0'};
-  HANDLE hSymbolicLink = NULL;
-  UNICODE_STRING usSymbolicLinkTarget;
+std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLinks(std::wstring strSessionNum, std::wstring strType) {
+
+  std::vector<std::pair<std::wstring, std::wstring>> objects;
 
   // look up NtQuerySymbolicLinkObject as exported from ntdll
-  NtQuerySymbolicLinkObject = (NTQUERYSYMBOLICLINKOBJECT)GetProcAddress(
+  NTQUERYSYMBOLICLINKOBJECT NtQuerySymbolicLinkObject = (NTQUERYSYMBOLICLINKOBJECT)GetProcAddress(
       GetModuleHandleA("ntdll"), "NtQuerySymbolicLinkObject");
   if (NULL == NtQuerySymbolicLinkObject) {
-      return FALSE;
+      return objects;
   }
 
   // by convention, we expect there to be <n> objects in \Sessions\BNOLINKS with
@@ -115,57 +111,50 @@ BOOL CALLBACK EnumerateBaseNamedObjectsLinks(POBJDIR_INFORMATION pObjDirInfo,
   //
   //   (3) the symbolic link point to a directory object
   //
-  // begin by validating that the object type is "SymbolicLink"
+  // validate in this order
   //
-  if (0 != wcscmp(L"SymbolicLink", pObjDirInfo->ObjectTypeName.Buffer)) {
-    return FALSE;
-  }
 
+  // validate (1)
+  // 
   // validate that this appears to be a valid terminal services session id
   // another approach is to enumerate windows terminal services sessions with
-  // WTSEnumerateSessions
-  // and validate against that list
+  // WTSEnumerateSessions and validate against that list
   //
-  if (!(0 == wcscmp(L"0", pObjDirInfo->ObjectName.Buffer) ||
-        _wtoi(pObjDirInfo->ObjectName.Buffer) > 0)) {
-    return FALSE;
+  if (!(L"0" == strSessionNum || std::stoi(strSessionNum) > 0)) {
+    return objects;
+  }
+
+  // validate (2)
+  //
+  // validate that the object type is "SymbolicLink"
+  //
+  if (L"SymbolicLink" != strType) {
+    return objects;
   }
 
   // at this point we have SymbolicLink with a name matching a terminal services
-  // session id
-  // build the fully qualified object path
-  HRESULT hr = StringCchPrintfW(wzSessionPath,
-                        MAX_PATH,
-                        L"%s\\%s",
-                        L"\\Sessions\\BNOLINKS",
-                        pObjDirInfo->ObjectName.Buffer);
-  if (FAILED(hr)) {
-    return FALSE;
-  }
+  // session id.  now build the fully qualified object path
+  std::wstring qualifiedpath = L"\\Sessions\\BNOLINKS\\" + strSessionNum;
 
   // open the symbolic link itself in order to determine the target of the link
   KObjHandle slo;
-  if (!slo.openSymLinkObj(wzSessionPath)) {
-    LOG(INFO) << "OpenSymbolicLink failed with 0x" << std::hex << hr << " for "
-      << wzSessionPath;
-    return FALSE;
+  if (!slo.openSymLinkObj(qualifiedpath)) {
+    return objects;
   }
 
-  usSymbolicLinkTarget.Buffer = wzSymbolicLinkTarget;
+  UNICODE_STRING usSymbolicLinkTarget;
+  WCHAR wzTargetLinkBuffer[MAX_PATH];
+  usSymbolicLinkTarget.Buffer = wzTargetLinkBuffer;
   usSymbolicLinkTarget.Length = 0;
-  usSymbolicLinkTarget.MaximumLength = sizeof(wzSymbolicLinkTarget);
+  usSymbolicLinkTarget.MaximumLength = MAX_PATH;
 
-  ntStatus =
-      NtQuerySymbolicLinkObject(hSymbolicLink, &usSymbolicLinkTarget, NULL);
+  NTSTATUS ntStatus =
+      NtQuerySymbolicLinkObject(slo.getAsHandle(), &usSymbolicLinkTarget, NULL);
   if (STATUS_SUCCESS != ntStatus) {
-    return FALSE;
+    return objects;
   }
 
-  std::vector<std::pair<std::wstring, std::wstring>> thingies = EnumerateObjectNamespace(usSymbolicLinkTarget.Buffer);
-
-  
-
-  return TRUE;
+  return EnumerateObjectNamespace(usSymbolicLinkTarget.Buffer);
 }
 
 
@@ -175,13 +164,17 @@ QueryData genBaseNamedObjects(QueryContext& context) {
   // enumerate the base named objects in each terminal services session
   std::vector<std::pair<std::wstring, std::wstring>> sessions = EnumerateObjectNamespace(L"\\Sessions\\BNOLINKS");
  
-  for (auto & element : sessions) {
-    Row r;
-    r["object_name"] = wstringToString(element.first.c_str());
-    r["object_type"] = wstringToString(element.second.c_str());
+  for (auto & session : sessions) {
 
-    results.push_back(r);
+    auto objects = EnumerateBaseNamedObjectsLinks(session.first, session.second);
 
+    for (auto & object : objects) {
+      Row r;
+      r["object_name"] = wstringToString(object.first.c_str());
+      r["object_type"] = wstringToString(object.second.c_str());
+
+      results.push_back(r);
+    }
   }
 
   return results;
