@@ -57,8 +57,8 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(
   for (DWORD index = 0;;) {
     BYTE rgDirObjInfoBuffer[1024 * 8] = {0};
     POBJDIR_INFORMATION pObjDirInfo = (POBJDIR_INFORMATION)rgDirObjInfoBuffer;
-    memset(rgDirObjInfoBuffer, 0, sizeof(rgDirObjInfoBuffer));
 
+    //  get the name and type of the index'th object in the directory
     NTSTATUS ntStatus = NtQueryDirectoryObject(kdo.getAsHandle(),
                                                pObjDirInfo,
                                                sizeof(rgDirObjInfoBuffer),
@@ -67,7 +67,6 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(
                                                &index,
                                                NULL);
     if (STATUS_SUCCESS != ntStatus) {
-      // todo: error check here
       break;
     }
 

@@ -82,8 +82,9 @@ bool KObjHandle::openSymLinkObj(std::wstring strName) {
 
 // open a Windows object directory object with DIRECTORY_QUERY
 bool KObjHandle::openDirObj(std::wstring strName) {
-  if (valid())
+  if (valid()) {
     return false;
+  }
 
   // NtOpenDirectoryObject is documented on MSDN at
   // https://msdn.microsoft.com/en-us/library/bb470234(v=vs.85).aspx
@@ -118,5 +119,5 @@ bool KObjHandle::openDirObj(std::wstring strName) {
 
   return true;
 }
-}
-}
+} // tables
+} // osquery
