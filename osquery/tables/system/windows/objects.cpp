@@ -14,12 +14,11 @@
 #include <strsafe.h>
 
 #include <osquery/core.h>
+#include <osquery/core/windows/kobjhandle.h>
+#include <osquery/core/windows/ntapi.h>
+#include <osquery/core/windows/wmi.h>
 #include <osquery/logger.h>
 #include <osquery/tables.h>
-#include <osquery/core/windows/wmi.h>
-#include <osquery/core/windows/ntapi.h>
-#include <osquery/core/windows/kobjhandle.h>
-
 
 namespace osquery {
 namespace tables {
@@ -32,8 +31,8 @@ namespace tables {
 //    https://randomsourcecode.wordpress.com/2015/03/14/enumerating-deviceobjects-from-user-mode/
 //    https://msdn.microsoft.com/en-us/library/bb470238(v=vs.85).aspx
 //
-std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std::wstring directory) {
-
+std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(
+    std::wstring directory) {
   std::vector<std::pair<std::wstring, std::wstring>> objects;
 
   // look up addresses of NtQueryDirectoryObject and
@@ -41,10 +40,11 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
   //
   // NtQueryDirectoryObject is documented on MSDN, there is no
   // associated header or import library
-  NTQUERYDIRECTORYOBJECT NtQueryDirectoryObject = (NTQUERYDIRECTORYOBJECT)GetProcAddress(
-      GetModuleHandleA("ntdll"), "NtQueryDirectoryObject");
+  NTQUERYDIRECTORYOBJECT NtQueryDirectoryObject =
+      (NTQUERYDIRECTORYOBJECT)GetProcAddress(GetModuleHandleA("ntdll"),
+                                             "NtQueryDirectoryObject");
   if (NULL == NtQueryDirectoryObject) {
-      return objects;
+    return objects;
   }
 
   // open the caller-provided root directory
@@ -52,20 +52,20 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
   if (!kdo.openDirObj(directory)) {
     return objects;
   }
-  
+
   // iterator index is incremented by NtQueryDirectoryObject
   for (DWORD index = 0;;) {
-    BYTE rgDirObjInfoBuffer[1024 * 8] = { 0 };
+    BYTE rgDirObjInfoBuffer[1024 * 8] = {0};
     POBJDIR_INFORMATION pObjDirInfo = (POBJDIR_INFORMATION)rgDirObjInfoBuffer;
     memset(rgDirObjInfoBuffer, 0, sizeof(rgDirObjInfoBuffer));
 
     NTSTATUS ntStatus = NtQueryDirectoryObject(kdo.getAsHandle(),
-                                      pObjDirInfo,
-                                      sizeof(rgDirObjInfoBuffer),
-                                      TRUE,
-                                      FALSE,
-                                      &index,
-                                      NULL);
+                                               pObjDirInfo,
+                                               sizeof(rgDirObjInfoBuffer),
+                                               TRUE,
+                                               FALSE,
+                                               &index,
+                                               NULL);
     if (STATUS_SUCCESS != ntStatus) {
       // todo: error check here
       break;
@@ -83,17 +83,20 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
 
 // enumerate all objects in a given windows terminal services session
 //
-// objects are found in the windows object directory "\Sessions\BNOLINKS\<sessionnum>"
+// objects are found in the windows object directory
+// "\Sessions\BNOLINKS\<sessionnum>"
 //
-std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLinks(std::wstring sessionNum, std::wstring objectType) {
-
+std::vector<std::pair<std::wstring, std::wstring>>
+EnumerateBaseNamedObjectsLinks(std::wstring sessionNum,
+                               std::wstring objectType) {
   std::vector<std::pair<std::wstring, std::wstring>> objects;
 
   // look up NtQuerySymbolicLinkObject as exported from ntdll
-  NTQUERYSYMBOLICLINKOBJECT NtQuerySymbolicLinkObject = (NTQUERYSYMBOLICLINKOBJECT)GetProcAddress(
-      GetModuleHandleA("ntdll"), "NtQuerySymbolicLinkObject");
+  NTQUERYSYMBOLICLINKOBJECT NtQuerySymbolicLinkObject =
+      (NTQUERYSYMBOLICLINKOBJECT)GetProcAddress(GetModuleHandleA("ntdll"),
+                                                "NtQuerySymbolicLinkObject");
   if (NULL == NtQuerySymbolicLinkObject) {
-      return objects;
+    return objects;
   }
 
   // by convention, we expect there to be <n> objects in \Sessions\BNOLINKS with
@@ -111,7 +114,7 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLink
   //
 
   // validate (1)
-  // 
+  //
   // validate that this appears to be a valid terminal services session id
   // another approach is to enumerate windows terminal services sessions with
   // WTSEnumerateSessions and validate against that list
@@ -157,13 +160,14 @@ QueryData genBaseNamedObjects(QueryContext& context) {
   QueryData results;
 
   // enumerate the base named objects in each terminal services session
-  std::vector<std::pair<std::wstring, std::wstring>> sessions = EnumerateObjectNamespace(L"\\Sessions\\BNOLINKS");
- 
-  for (auto & session : sessions) {
+  std::vector<std::pair<std::wstring, std::wstring>> sessions =
+      EnumerateObjectNamespace(L"\\Sessions\\BNOLINKS");
 
-    auto objects = EnumerateBaseNamedObjectsLinks(session.first, session.second);
+  for (auto& session : sessions) {
+    auto objects =
+        EnumerateBaseNamedObjectsLinks(session.first, session.second);
 
-    for (auto & object : objects) {
+    for (auto& object : objects) {
       Row r;
       r["session_id"] = INTEGER(std::stoi(session.first));
       r["object_name"] = wstringToString(object.first.c_str());

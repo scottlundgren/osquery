@@ -16,22 +16,20 @@
 namespace osquery {
 namespace tables {
 
-class KObjHandle
-{
-    HANDLE _h;
-public:
+class KObjHandle {
+  HANDLE _h;
 
-    KObjHandle();
-    ~KObjHandle();
+ public:
+  KObjHandle();
+  ~KObjHandle();
 
-    bool openDirObj(std::wstring directory);
-    bool openSymLinkObj(std::wstring symlink);
+  bool openDirObj(std::wstring directory);
+  bool openSymLinkObj(std::wstring symlink);
 
-    HANDLE getAsHandle();
+  HANDLE getAsHandle();
 
-    void close();
-    bool valid();
+  void close();
+  bool valid();
 };
-
 }
 }

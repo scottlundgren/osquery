@@ -10,31 +10,27 @@
 
 #define _WIN32_DCOM
 
-#include "ntapi.h"
 #include "Kobjhandle.h"
+#include "ntapi.h"
 
 #include <Windows.h>
 
 namespace osquery {
 namespace tables {
 
-KObjHandle::KObjHandle()
-{
-    _h = NULL;
+KObjHandle::KObjHandle() {
+  _h = NULL;
 }
 
-KObjHandle::~KObjHandle()
-{
-    close();
+KObjHandle::~KObjHandle() {
+  close();
 }
 
-HANDLE KObjHandle::getAsHandle()
-{
+HANDLE KObjHandle::getAsHandle() {
   return _h;
 }
 
-bool KObjHandle::valid()
-{
+bool KObjHandle::valid() {
   if (NULL != _h) {
     return true;
   }
@@ -42,8 +38,7 @@ bool KObjHandle::valid()
   return false;
 }
 
-void KObjHandle::close()
-{
+void KObjHandle::close() {
   if (NULL != _h) {
     CloseHandle(_h);
     _h = NULL;
@@ -52,16 +47,16 @@ void KObjHandle::close()
 
 // open a Windows symbolic link by name with SYMBOLIC_LINK_QUERY
 bool KObjHandle::openSymLinkObj(std::wstring strName) {
-
   if (valid()) {
     return false;
   }
 
   // look up address of NtOpenSymbolicLinkObject, exported from ntdll
-  NTOPENSYMBOLICLINKOBJECT NtOpenSymbolicLinkObject = (NTOPENSYMBOLICLINKOBJECT)GetProcAddress(
-      GetModuleHandleA("ntdll"), "NtOpenSymbolicLinkObject");
+  NTOPENSYMBOLICLINKOBJECT NtOpenSymbolicLinkObject =
+      (NTOPENSYMBOLICLINKOBJECT)GetProcAddress(GetModuleHandleA("ntdll"),
+                                               "NtOpenSymbolicLinkObject");
   if (NULL == NtOpenSymbolicLinkObject) {
-      return false;
+    return false;
   }
 
   OBJECT_ATTRIBUTES oa;
@@ -79,21 +74,22 @@ bool KObjHandle::openSymLinkObj(std::wstring strName) {
 
   NTSTATUS ntStatus = NtOpenSymbolicLinkObject(&_h, SYMBOLIC_LINK_QUERY, &oa);
   if (STATUS_SUCCESS != ntStatus) {
-      return false;
+    return false;
   }
 
   return true;
 }
 
-// open a Windows object directory object with DIRECTORY_QUERY 
+// open a Windows object directory object with DIRECTORY_QUERY
 bool KObjHandle::openDirObj(std::wstring strName) {
+  if (valid())
+    return false;
 
-  if (valid()) return false;
-  
   // NtOpenDirectoryObject is documented on MSDN at
   // https://msdn.microsoft.com/en-us/library/bb470234(v=vs.85).aspx
-  NTOPENDIRECTORYOBJECT NtOpenDirectoryObject = (NTOPENDIRECTORYOBJECT)GetProcAddress(
-      GetModuleHandleA("ntdll"), "NtOpenDirectoryObject");
+  NTOPENDIRECTORYOBJECT NtOpenDirectoryObject =
+      (NTOPENDIRECTORYOBJECT)GetProcAddress(GetModuleHandleA("ntdll"),
+                                            "NtOpenDirectoryObject");
   if (NULL == NtOpenDirectoryObject) {
     return false;
   }
@@ -122,6 +118,5 @@ bool KObjHandle::openDirObj(std::wstring strName) {
 
   return true;
 }
-
 }
 }
