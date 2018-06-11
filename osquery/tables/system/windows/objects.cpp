@@ -32,7 +32,7 @@ namespace tables {
 //    https://randomsourcecode.wordpress.com/2015/03/14/enumerating-deviceobjects-from-user-mode/
 //    https://msdn.microsoft.com/en-us/library/bb470238(v=vs.85).aspx
 //
-std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std::wstring strRoot) {
+std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std::wstring directory) {
 
   std::vector<std::pair<std::wstring, std::wstring>> objects;
 
@@ -49,7 +49,7 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
 
   // open the caller-provided root directory
   KObjHandle kdo;
-  if (!kdo.openDirObj(strRoot)) {
+  if (!kdo.openDirObj(directory)) {
     return objects;
   }
   
@@ -85,7 +85,7 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
 //
 // objects are found in the windows object directory "\Sessions\BNOLINKS\<sessionnum>"
 //
-std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLinks(std::wstring strSessionNum, std::wstring strType) {
+std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLinks(std::wstring sessionNum, std::wstring objectType) {
 
   std::vector<std::pair<std::wstring, std::wstring>> objects;
 
@@ -116,7 +116,7 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLink
   // another approach is to enumerate windows terminal services sessions with
   // WTSEnumerateSessions and validate against that list
   //
-  if (!(L"0" == strSessionNum || std::stoi(strSessionNum) > 0)) {
+  if (!(L"0" == sessionNum || std::stoi(sessionNum) > 0)) {
     return objects;
   }
 
@@ -124,13 +124,13 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLink
   //
   // validate that the object type is "SymbolicLink"
   //
-  if (L"SymbolicLink" != strType) {
+  if (L"SymbolicLink" != objectType) {
     return objects;
   }
 
   // at this point we have SymbolicLink with a name matching a terminal services
   // session id.  now build the fully qualified object path
-  std::wstring qualifiedpath = L"\\Sessions\\BNOLINKS\\" + strSessionNum;
+  std::wstring qualifiedpath = L"\\Sessions\\BNOLINKS\\" + sessionNum;
 
   // open the symbolic link itself in order to determine the target of the link
   KObjHandle slo;
@@ -165,6 +165,7 @@ QueryData genBaseNamedObjects(QueryContext& context) {
 
     for (auto & object : objects) {
       Row r;
+      r["session_id"] = INTEGER(std::stoi(session.first));
       r["object_name"] = wstringToString(object.first.c_str());
       r["object_type"] = wstringToString(object.second.c_str());
 
