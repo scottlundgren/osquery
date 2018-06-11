@@ -52,6 +52,7 @@ if (WINDOWS)
     PRIVATE
       "${CMAKE_CURRENT_LIST_DIR}/windows/initializer.cpp"
       "${CMAKE_CURRENT_LIST_DIR}/windows/process_ops.cpp"
+      "${CMAKE_CURRENT_LIST_DIR}/windows/kobjhandle.cpp"
       "${CMAKE_CURRENT_LIST_DIR}/windows/process_ops.h"
       "${CMAKE_CURRENT_LIST_DIR}/windows/process.cpp"
       "${CMAKE_CURRENT_LIST_DIR}/windows/utils.cpp"

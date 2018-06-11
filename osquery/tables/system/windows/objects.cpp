@@ -10,10 +10,6 @@
 
 #define _WIN32_DCOM
 
-#include "ntapi.h"
-#include "kobjhandle.h"
-
-
 #include <Windows.h>
 #include <strsafe.h>
 
@@ -21,6 +17,8 @@
 #include <osquery/logger.h>
 #include <osquery/tables.h>
 #include <osquery/core/windows/wmi.h>
+#include <osquery/core/windows/ntapi.h>
+#include <osquery/core/windows/kobjhandle.h>
 
 
 namespace osquery {
@@ -54,7 +52,7 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
   if (!kdo.openDirObj(strRoot)) {
     return objects;
   }
-	
+  
   // iterator index is incremented by NtQueryDirectoryObject
   for (DWORD index = 0;;) {
     BYTE rgDirObjInfoBuffer[1024 * 8] = { 0 };

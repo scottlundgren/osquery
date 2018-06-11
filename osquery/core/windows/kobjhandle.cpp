@@ -10,8 +10,9 @@
 
 #define _WIN32_DCOM
 
-#include "Kobjhandle.h"
 #include "ntapi.h"
+#include "Kobjhandle.h"
+
 #include <Windows.h>
 
 namespace osquery {
@@ -65,6 +66,7 @@ bool KObjHandle::openSymLinkObj(std::wstring strName) {
 
   OBJECT_ATTRIBUTES oa;
   UNICODE_STRING usLinkName;
+  oa.Length = sizeof(oa);
   oa.RootDirectory = NULL;
   oa.ObjectName = &usLinkName;
   oa.ObjectName->Length = LOWORD(strName.length() * sizeof(WCHAR));
