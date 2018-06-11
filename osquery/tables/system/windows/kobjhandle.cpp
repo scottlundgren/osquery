@@ -34,21 +34,28 @@ HANDLE KObjHandle::getAsHandle()
 
 bool KObjHandle::valid()
 {
-  if (NULL != _h) return true;
+  if (NULL != _h) {
+    return true;
+  }
 
   return false;
 }
 
 void KObjHandle::close()
 {
-    if (NULL != _h) { CloseHandle(_h); _h = NULL; }
+  if (NULL != _h) {
+    CloseHandle(_h);
+    _h = NULL;
+  }
 }
 
 // open a Windows symbolic link by name with SYMBOLIC_LINK_QUERY
 bool KObjHandle::openSymLinkObj(std::wstring strName) {
 
-  if (valid()) return false;
-	
+  if (valid()) {
+    return false;
+  }
+
   // look up address of NtOpenSymbolicLinkObject, exported from ntdll
   NTOPENSYMBOLICLINKOBJECT NtOpenSymbolicLinkObject = (NTOPENSYMBOLICLINKOBJECT)GetProcAddress(
       GetModuleHandleA("ntdll"), "NtOpenSymbolicLinkObject");

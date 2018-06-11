@@ -20,8 +20,9 @@
 namespace osquery {
 namespace tables {
 
-#define NTSTATUS				ULONG
+#define NTSTATUS				        ULONG
 #define STATUS_SUCCESS          0L
+
 #define OBJ_CASE_INSENSITIVE    64L
 #define DIRECTORY_QUERY         0x0001
 #define SYMBOLIC_LINK_QUERY     0x0001
@@ -75,19 +76,19 @@ typedef NTSTATUS(WINAPI *NTQUERYSYMBOLICLINKOBJECT)(
 
 typedef struct _SYSTEM_HANDLE_INFORMATION
 {
-  ULONG		ProcessId;
-  BYTE		ObjectTypeNumber;
-  BYTE		Flags;
-  USHORT	Handle;
-  PVOID		Object;
+  ULONG		    ProcessId;
+  BYTE		    ObjectTypeNumber;
+  BYTE		    Flags;
+  USHORT	    Handle;
+  PVOID		    Object;
   ACCESS_MASK GrantedAccess;
 } SYSTEM_HANDLE_INFORMATION, *PSYSTEM_HANDLE_INFORMATION;
 
 typedef struct _OBJDIR_INFORMATION {
-  UNICODE_STRING          ObjectName;
-  UNICODE_STRING          ObjectTypeName;
-  BYTE                    Data[1];
+  UNICODE_STRING  ObjectName;
+  UNICODE_STRING  ObjectTypeName;
+  BYTE            Data[1];
 } OBJDIR_INFORMATION, *POBJDIR_INFORMATION;
 
-  } // namespace tables
+} // namespace tables
 } // namespace osquery

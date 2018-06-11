@@ -83,11 +83,9 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateObjectNamespace(std:
   return objects;
 }
 
-// callback function to be invoked for each object discovered in
-// the windows object directory "\Sessions\BNOLINKS"
+// enumerate all objects in a given windows terminal services session
 //
-// for each enumerated object, verify some assumptions and then
-// enumerate the object directory referenced by the object
+// objects are found in the windows object directory "\Sessions\BNOLINKS\<sessionnum>"
 //
 std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLinks(std::wstring strSessionNum, std::wstring strType) {
 
@@ -156,7 +154,6 @@ std::vector<std::pair<std::wstring, std::wstring>> EnumerateBaseNamedObjectsLink
 
   return EnumerateObjectNamespace(usSymbolicLinkTarget.Buffer);
 }
-
 
 QueryData genBaseNamedObjects(QueryContext& context) {
   QueryData results;

@@ -24,8 +24,8 @@ public:
     KObjHandle();
     ~KObjHandle();
 
-    bool openDirObj(std::wstring strName);
-    bool openSymLinkObj(std::wstring strName);
+    bool openDirObj(std::wstring directory);
+    bool openSymLinkObj(std::wstring symlink);
 
     HANDLE getAsHandle();
 
