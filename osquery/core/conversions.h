@@ -76,7 +76,7 @@ std::vector<std::string> split(const std::string& s,
  * @return a vector of strings split by delim for occurrences.
  */
 std::vector<std::string> split(const std::string& s,
-                               const std::string& delim,
+                               char delim,
                                size_t occurences);
 
 /**
@@ -126,7 +126,7 @@ std::string join(const std::set<std::string>& s, const std::string& tok);
  * @param encoded The encode base64 string.
  * @return Decoded string.
  */
-std::string base64Decode(const std::string& encoded);
+std::string base64Decode(std::string encoded);
 
 /**
  * @brief Encode a  string.
